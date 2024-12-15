@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
+from matplotlib.collections import PathCollection
 import numpy as np
 import os
 import pandas as pd
+import statsmodels.api as sm
 from scipy.stats import entropy
 import scipy.stats as stats
 import glob
@@ -10,8 +12,15 @@ import glob
 def reward(df):
     return df.diff().fillna(0)
 
+def mean_RT(rt_data):
+    Q1 = np.percentile(rt_data, 25)
+    Q3 = np.percentile(rt_data, 75)
+    IQR = Q3 - Q1
+    mask = (rt_data >= Q1 - 1.5*IQR) & (rt_data <= Q3 + 1.5*IQR)
+    return rt_data[mask].mean()
+
 # KLD compute
-def KLD(free, ctrl, bins=10, eps=1e-10):
+def calculate_KLD(free, ctrl, bins=10, eps=1e-10):
     histfree, edges = np.histogram(free,bins=10,density=True)
     histctrl, edges = np.histogram(ctrl, bins=10, density=True)
 
@@ -19,9 +28,48 @@ def KLD(free, ctrl, bins=10, eps=1e-10):
     histfree = np.clip(histfree, eps, 1)
     histctrl = np.clip(histctrl, eps, 1)
 
+    d = np.sum(histfree * np.log2(histfree + eps) - 
+               histfree * np.log2(histctrl + eps))
+    return d
+
+    '''
     # scipy's entropy uses the same formula as KLD
     kld = entropy(histfree, histctrl)
     return kld
+    '''
+
+# F-statistic
+def RT_regression(ax):
+    # Get scatter plot data from the axis using correct matplotlib class
+    scatter_plots = [child for child in ax.get_children() if isinstance(child, PathCollection)]
+    
+    # Initialize lists to store all data points
+    x_all = []
+    y_all = []
+    
+    # Collect all data points from scatter plots
+    for scatter in scatter_plots:
+        points = scatter.get_offsets()
+        x_all.extend(points[:, 0])
+        y_all.extend(points[:, 1])
+    
+    # Convert to numpy arrays
+    x_data = np.array(x_all)
+    y_data = np.array(y_all)
+    
+    # Fit regression
+    X = sm.add_constant(x_data)
+    model = sm.OLS(y_data, X).fit()
+    
+    # Create prediction line
+    x_range = np.linspace(min(x_data), max(x_data), 100)
+    X_pred = sm.add_constant(x_range)
+    y_pred = model.predict(X_pred)
+    
+    # Plot regression line
+    ax.plot(x_range, y_pred, 'r-', alpha=0.5)
+    
+    return model
 
 # More efficient method of extracting subsets from each dataframe
 def extract(task):
@@ -75,28 +123,63 @@ for file in taskfiles:
 struct = {key: extract(task) for key, task in taskdf.items()}
 
 
-# Setup of plots
+# Setup of each subplot
 fig = plt.figure(layout='constrained')
-gs = fig.add_gridspec(3,3)
+gs = fig.add_gridspec(6,3)
 
-ax0 = fig.add_subplot(gs[0,0])
-ax1 = fig.add_subplot(gs[1,0])
-ax2 = fig.add_subplot(gs[0,1])
+ax11 = fig.add_subplot(gs[0:2,0])
+ax12 = fig.add_subplot(gs[2:4,0])
+ax13 = fig.add_subplot(gs[4:6,0])
+ax13.set_xlabel('KLD - Active/Passive', fontsize=10.5, fontweight='bold')
 
-# First Column
+ax11.set_ylabel('Total Points (Reward)', fontsize=10.5, fontweight='bold')
+ax12.set_ylabel('Accuracy', fontsize=10.5, fontweight='bold')
+ax13.set_ylabel('RT', fontsize=10.5, fontweight='bold')
+
+ax21 = fig.add_subplot(gs[0:2,1])
+ax22 = fig.add_subplot(gs[2:4,1])
+ax23 = fig.add_subplot(gs[4:6,1])
+ax23.set_xlabel('T-stat - Active/Passive', fontsize=10.5, fontweight='bold')
+
+ax32 = fig.add_subplot(gs[3:5,2])
+ax32.set_xlabel('Accuracy', fontsize=10.5, fontweight='bold')
+ax32.set_ylabel('Total Points (Reward)', fontsize=10.5, fontweight='bold')
+
+axhist = fig.add_subplot(gs[1:3,2])
+axhist.set_xlabel('KLD Histogram', fontsize=10.5, fontweight='bold')
+
+kldhist = []
+
+# Figures
 for task, data in struct.items():
-    kld = KLD(data['ctrls']['inflationTime(ms)'], data['free']['inflationTime(ms)'])
+    kld = calculate_KLD(data['ctrls']['inflationTime(ms)'], data['free']['inflationTime(ms)'])
+    kldhist.append(kld)
     totalpoints = data['free']['total reward'].iloc[-1]
-    ax0.scatter(kld, totalpoints, marker='x', color='blue', s=50, linewidth=2)
-    ax1.scatter(kld, data['acc'], marker='x', color='blue', s=50, linewidth=2)
-    
-# Using scipy's built in t-stat func
-for task, data in struct.items():
+
+
+    # Using scipy's built in t-stat func
     t_stat, p_value = stats.ttest_ind(data['free']['inflationTime(ms)'], data['ctrls']['inflationTime(ms)'])  # T-statistic for ITs?
-    totalpoints = data['free']['total reward'].iloc[-1]
-    ax2.scatter(totalpoints,t_stat)
 
-# Scatterplot + Histogram
+    ax11.scatter(kld, totalpoints, color='blue')
+    ax12.scatter(kld, data['acc'], color='blue')
+    ax13.scatter(kld, mean_RT(data['free']['reactionTime(ms)']), color='blue')
+    
+    ax21.scatter(t_stat, totalpoints)
+    ax22.scatter(t_stat, data['acc'])
+    ax23.scatter(t_stat, mean_RT(data['free']['reactionTime(ms)']))
+
+    ax32.scatter(data['acc'], data['free']['total reward'].iloc[-1])
+
+axhist.hist(kldhist,bins=10,density=True)
+
+
+# RT Regression - for divergence and t stat
+modeld = RT_regression(ax13)
+modelt = RT_regression(ax23)
+#ax13.plot([], [])   
+#ax23.plot([], [])
+
+# TODO: Scatterplot + Histogram
 
 
 for ax in fig.get_axes():
@@ -104,5 +187,3 @@ for ax in fig.get_axes():
 
 
 plt.show()
-
-# Dont need KLD Impulse?
