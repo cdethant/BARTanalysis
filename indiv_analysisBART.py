@@ -184,26 +184,27 @@ plt.show()
 
 # ----------------------------------------------------------
 
-# Save PDF
-fig.savefig('session_' + sessionID) # TODO: Replace with "{patient/sessionID}"
-c = canvas.Canvas('session_' + sessionID + '.pdf', pagesize=letter)
+def main():
+    # Save PDF
+    fig.savefig('session_' + sessionID) # TODO: Replace with "{patient/sessionID}"
+    c = canvas.Canvas('session_' + sessionID + '.pdf', pagesize=letter)
 
-c.setFont("Helvetica", 12)
-c.drawString(60, 750, f"BART analysis - Session {sessionID}")
+    c.setFont("Helvetica", 12)
+    c.drawString(60, 750, f"BART analysis - Session {sessionID}")
 
-c.drawString(60, 720, f"Total Balloons: {totalballoons}")
-c.drawString(60, 690, f"Overall Accuracy: {accRed}")
-c.drawString(60, 670, f"Accuracy Red: {accRed}")
-c.drawString(60, 650, f"Accuracy Orange: {accOrange}")
-c.drawString(60, 630, f"Accuracy Yellow: {accYellow}")
-c.drawString(60, 610, "Signifcant difference in accuracy among balloon colors: X^2")
+    c.drawString(60, 720, f"Total Balloons: {totalballoons}")
+    c.drawString(60, 690, f"Overall Accuracy: {accRed}")
+    c.drawString(60, 670, f"Accuracy Red: {accRed}")
+    c.drawString(60, 650, f"Accuracy Orange: {accOrange}")
+    c.drawString(60, 630, f"Accuracy Yellow: {accYellow}")
+    c.drawString(60, 610, "Signifcant difference in accuracy among balloon colors: X^2")
 
-c.drawString(60, 580, f"Total Reward: {totalReward}    Average Reward: {avgReward}")
-c.drawString(60, 560, f"KLD-derived Impulsivity: {KLDred}")
+    c.drawString(60, 580, f"Total Reward: {totalReward}    Average Reward: {avgReward}")
+    c.drawString(60, 560, f"KLD-derived Impulsivity: {KLDred}")
 
-c.drawImage(f'session_{sessionID}.png', 50, 100, width=500, height=375)
+    c.drawImage(f'session_{sessionID}.png', 50, 100, width=500, height=375)
 
-c.save()
+    c.save()
 
 
 if __name__=="__main__":
