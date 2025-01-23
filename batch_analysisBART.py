@@ -19,26 +19,30 @@ def mean_RT(rt_data):
     mask = (rt_data >= Q1 - 1.5*IQR) & (rt_data <= Q3 + 1.5*IQR)
     return rt_data[mask].mean()
 
-# KLD compute
+# KLD compute: input active and passive ITs
 def calculate_KLD(free, ctrl, bins=10, eps=1e-10):
-    histfree, edges = np.histogram(free,bins=10,density=True)
-    histctrl, edges = np.histogram(ctrl, bins=10, density=True)
+    histfree, edges = np.histogram(free, bins=bins, density=False)  # Note: density=False to match MATLAB
+    histctrl, edges = np.histogram(ctrl, bins=bins, density=False)
+    
+    # Normalize histograms manually to match MATLAB behavior
+    freeHist_norm = histfree / np.sum(histfree)
+    ctrlHist_norm = histctrl / np.sum(histctrl)
+    
+    # Calculate KLD exactly as in MATLAB
+    d = np.sum(
+        freeHist_norm * np.log2(freeHist_norm + eps) - 
+        freeHist_norm * np.log2(ctrlHist_norm + eps)
+    )
+    
+    # This line of code fixes values to match Rhiannon's paper
+    d = -1 * np.log10(d)
 
-    # Add a small epsilon to avoid log(0)
-    histfree = np.clip(histfree, eps, 1)
-    histctrl = np.clip(histctrl, eps, 1)
-
-    d = np.sum(histfree * np.log2(histfree + eps) - 
-               histfree * np.log2(histctrl + eps))
     return d
+    
+    #scipy's entropy uses the same formula as KLD (entropy(histfree, histctrl))
 
-    '''
-    # scipy's entropy uses the same formula as KLD
-    kld = entropy(histfree, histctrl)
-    return kld
-    '''
 
-# F-statistic
+# Regression Fit RT
 def RT_regression(ax):
     # Get scatter plot data from the axis using correct matplotlib class
     scatter_plots = [child for child in ax.get_children() if isinstance(child, PathCollection)]
@@ -65,11 +69,19 @@ def RT_regression(ax):
     x_range = np.linspace(min(x_data), max(x_data), 100)
     X_pred = sm.add_constant(x_range)
     y_pred = model.predict(X_pred)
+
+    # Get prediction confidence interval
+    pred = model.get_prediction(X_pred)
+    pred_summary = pred.summary_frame(alpha=0.05)  # 95% confidence interval
     
-    # Plot regression line
+    # Plot regression line and confidence intervals
     ax.plot(x_range, y_pred, 'r-', alpha=0.5)
-    
-    return model
+    ax.fill_between(x_range, pred_summary['obs_ci_lower'], pred_summary['obs_ci_upper'], color='gray', alpha=0.2)
+
+    # F-statistic
+    ax.text(x_range[int(len(x_range)/2)], 800, f"F-stat={round(model.fvalue,2)}", ha='center', va='bottom')
+
+    print(model.params)
 
 # More efficient method of extracting subsets from each dataframe
 def extract(task):
@@ -105,7 +117,7 @@ def extract(task):
     }
 
 # Batch Analysis
-PATH='/home/ethant/Projects/bart/'
+PATH='/home/ethant/Documents/Projects/bart/sessions/'
 taskfiles = glob.glob(PATH + '**/task_data*.xlsx', recursive=True)
 
 taskdf = {}
@@ -116,8 +128,6 @@ for file in taskfiles:
     task = pd.read_excel(file)  # specify sheet name if needed: sheet_name='Sheet1'
     taskdf[filename] = task
 
-
-# taskdf.to_csv()
 
 # Use apply() to process each DataFrame in the dictionary
 struct = {key: extract(task) for key, task in taskdf.items()}
@@ -160,18 +170,57 @@ for task, data in struct.items():
     # Using scipy's built in t-stat func
     t_stat, p_value = stats.ttest_ind(data['free']['inflationTime(ms)'], data['ctrls']['inflationTime(ms)'])  # T-statistic for ITs?
 
-    ax11.scatter(kld, totalpoints, color='blue')
-    ax12.scatter(kld, data['acc'], color='blue')
-    ax13.scatter(kld, mean_RT(data['free']['reactionTime(ms)']), color='blue')
+    ax11.scatter(kld, totalpoints, color='black')
+    ax12.scatter(kld, data['acc'], color='black')
+    ax13.scatter(kld, mean_RT(data['free']['reactionTime(ms)']), color='black')
     
-    ax21.scatter(t_stat, totalpoints)
-    ax22.scatter(t_stat, data['acc'])
-    ax23.scatter(t_stat, mean_RT(data['free']['reactionTime(ms)']))
+    ax21.scatter(t_stat, totalpoints, color='black')
+    ax22.scatter(t_stat, data['acc'], color='black')
+    ax23.scatter(t_stat, mean_RT(data['free']['reactionTime(ms)']), color='black')
 
     ax32.scatter(data['acc'], data['free']['total reward'].iloc[-1])
 
 axhist.hist(kldhist,bins=10,density=True)
 
+# Set axis limits
+def get_plot_limits(ax):
+    scatter_plots = [child for child in ax.get_children() if isinstance(child, PathCollection)]
+    x_values = []
+    
+    for scatter in scatter_plots:
+        points = scatter.get_offsets()
+        if len(points) > 0:
+            x_values.extend(points[:, 0])
+            
+    return min(x_values) if x_values else None, max(x_values) if x_values else None
+
+# Get min/max for KLD column (ax11, ax12, ax13)
+kld_mins, kld_maxs = [], []
+for ax in [ax11, ax12, ax13]:
+    min_val, max_val = get_plot_limits(ax)
+    if min_val is not None:
+        kld_mins.append(min_val)
+        kld_maxs.append(max_val)
+
+# Get min/max for t-stat column (ax21, ax22, ax23)
+tstat_mins, tstat_maxs = [], []
+for ax in [ax21, ax22, ax23]:
+    min_val, max_val = get_plot_limits(ax)
+    if min_val is not None:
+        tstat_mins.append(min_val)
+        tstat_maxs.append(max_val)
+
+# Set limits for KLD column
+if kld_mins and kld_maxs:
+    for ax in [ax11, ax12, ax13]:
+        ax.set_xlim(min(kld_mins), max(kld_maxs))
+
+# Set limits for t-stat column
+if tstat_mins and tstat_maxs:
+    for ax in [ax21, ax22, ax23]:
+        ax.set_xlim(min(tstat_mins), max(tstat_maxs))
+
+        
 
 # RT Regression - for divergence and t stat
 modeld = RT_regression(ax13)
