@@ -60,9 +60,16 @@ oranges = taskdf[taskdf['balloonType'].str.contains('orange')]
 yellows = taskdf[taskdf['balloonType'].str.contains('yellow')]
 
 points = taskdf['total reward']
-pointsRed = reward(points[taskdf['balloonType'].str.contains('red')])
-pointsOrange = reward(points[taskdf['balloonType'].str.contains('orange')])
-pointsYellow = reward(points[taskdf['balloonType'].str.contains('yellow')])
+all_rewards = reward(points)
+
+pointsRed = all_rewards[taskdf['balloonType'].str.contains('red')]
+pointsOrange = all_rewards[taskdf['balloonType'].str.contains('orange')]
+pointsYellow = all_rewards[taskdf['balloonType'].str.contains('yellow')]
+
+# Remove zeros
+pointsRed = pointsRed[pointsRed != 0]
+pointsOrange = pointsOrange[pointsOrange != 0]
+pointsYellow = pointsYellow[pointsYellow != 0]
 
 
 # Reaction Times - outliers removed
@@ -119,8 +126,6 @@ KLDred = KLD(freeITs[free['balloonType'].str.contains('red')], ctrlITs[ctrls['ba
 #KLDred = KLDImpulse(freeITs[free['balloonType'].str.contains('red')],ctrlITs[ctrls['balloonType'].str.contains('red')])
 print(KLDred)
 
-# Kruskal Wallis Test
-
 
 # FIGURES ---------------------------------------------------
 
@@ -148,17 +153,17 @@ ax1.set_title('ITs - colors')
 ax1.set_xlabel('time (s)')
 ax1.set_ylabel('IT count')
 
-## FIGURE 3 - rewards from active trials
-pointsRedActive = reward(points[taskdf['balloonType'].str.contains('red') & ~taskdf['balloonType'].str.contains('special')])
-pointsOrangeActive = reward(points[taskdf['balloonType'].str.contains('orange') & ~taskdf['balloonType'].str.contains('special')])
-pointsYellowActive = reward(points[taskdf['balloonType'].str.contains('yellow') & ~taskdf['balloonType'].str.contains('special')])
-
-ax2.hist(pointsRedActive, bins=n_bins, alpha=0.5, edgecolor='black', color='red')
-ax2.hist(pointsOrangeActive, bins=n_bins, alpha=0.5, edgecolor='black', color='orange')
-ax2.hist(pointsYellowActive, bins=n_bins, alpha=0.5, edgecolor='black', color='yellow')
+## FIGURE 3 - rewards from trials (including passive)
+ax2.hist(pointsRed, bins=n_bins, alpha=0.5, edgecolor='black', color='red')
+ax2.hist(pointsOrange, bins=n_bins, alpha=0.5, edgecolor='black', color='orange')
+ax2.hist(pointsYellow, bins=n_bins, alpha=0.5, edgecolor='black', color='yellow')
 ax2.set_title('Rewards across color')
 ax2.set_xlabel('reward (points)')
-ax2.set_ylabel('count')
+ax2.set_ylabel('points bin count')
+
+print(pointsRed)
+print(pointsOrange)
+print(pointsYellow)
 
 ## FIGURE 4 - Violin plots
 ax3 = fig.add_subplot(gs[1,3])
