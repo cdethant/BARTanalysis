@@ -38,8 +38,6 @@ def calculate_KLD(free, ctrl, bins=10, eps=1e-10):
     d = -1 * np.log10(d)
 
     return d
-    
-    #scipy's entropy uses the same formula as KLD (entropy(histfree, histctrl))
 
 
 # Regression Fit RT
@@ -81,8 +79,6 @@ def RT_regression(ax):
     # F-statistic
     ax.text(x_range[int(len(x_range)/2)], 800, f"F-stat={round(model.fvalue,2)}", ha='center', va='bottom')
 
-    print(model.params)
-
 # More efficient method of extracting subsets from each dataframe
 def extract(task):
     mask_special = task['balloonType'].str.contains('special')
@@ -116,123 +112,126 @@ def extract(task):
         'acc': accuracy
     }
 
-# Batch Analysis
-PATH='/home/ethant/Documents/Projects/bart/sessions/'
-taskfiles = glob.glob(PATH + '**/task_data*.xlsx', recursive=True)
+# Main function passes into dashboard.py; To run local files, run directly.
 
-taskdf = {}
+def main(taskdf):
+    # Use apply() to process each DataFrame in the dictionary
+    struct = {key: extract(task) for key, task in taskdf.items()}
 
-for file in taskfiles:
-    filename = os.path.splitext(os.path.basename(file))[0]
+        # Setup of each subplot
+    fig = plt.figure(layout='constrained')
+    gs = fig.add_gridspec(6,3)
 
-    task = pd.read_excel(file)  # specify sheet name if needed: sheet_name='Sheet1'
-    taskdf[filename] = task
+    ax11 = fig.add_subplot(gs[0:2,0])
+    ax12 = fig.add_subplot(gs[2:4,0])
+    ax13 = fig.add_subplot(gs[4:6,0])
+    ax13.set_xlabel('KLD - Active/Passive', fontsize=10.5, fontweight='bold')
 
+    ax11.set_ylabel('Total Points (Reward)', fontsize=10.5, fontweight='bold')
+    ax12.set_ylabel('Accuracy', fontsize=10.5, fontweight='bold')
+    ax13.set_ylabel('RT', fontsize=10.5, fontweight='bold')
 
-# Use apply() to process each DataFrame in the dictionary
-struct = {key: extract(task) for key, task in taskdf.items()}
+    ax21 = fig.add_subplot(gs[0:2,1])
+    ax22 = fig.add_subplot(gs[2:4,1])
+    ax23 = fig.add_subplot(gs[4:6,1])
+    ax23.set_xlabel('T-stat - Active/Passive', fontsize=10.5, fontweight='bold')
 
+    ax32 = fig.add_subplot(gs[3:5,2])
+    ax32.set_xlabel('Accuracy', fontsize=10.5, fontweight='bold')
+    ax32.set_ylabel('Total Points (Reward)', fontsize=10.5, fontweight='bold')
 
-# Setup of each subplot
-fig = plt.figure(layout='constrained')
-gs = fig.add_gridspec(6,3)
+    axhist = fig.add_subplot(gs[1:3,2])
+    axhist.set_xlabel('KLD Histogram', fontsize=10.5, fontweight='bold')
 
-ax11 = fig.add_subplot(gs[0:2,0])
-ax12 = fig.add_subplot(gs[2:4,0])
-ax13 = fig.add_subplot(gs[4:6,0])
-ax13.set_xlabel('KLD - Active/Passive', fontsize=10.5, fontweight='bold')
+    kldhist = []
 
-ax11.set_ylabel('Total Points (Reward)', fontsize=10.5, fontweight='bold')
-ax12.set_ylabel('Accuracy', fontsize=10.5, fontweight='bold')
-ax13.set_ylabel('RT', fontsize=10.5, fontweight='bold')
-
-ax21 = fig.add_subplot(gs[0:2,1])
-ax22 = fig.add_subplot(gs[2:4,1])
-ax23 = fig.add_subplot(gs[4:6,1])
-ax23.set_xlabel('T-stat - Active/Passive', fontsize=10.5, fontweight='bold')
-
-ax32 = fig.add_subplot(gs[3:5,2])
-ax32.set_xlabel('Accuracy', fontsize=10.5, fontweight='bold')
-ax32.set_ylabel('Total Points (Reward)', fontsize=10.5, fontweight='bold')
-
-axhist = fig.add_subplot(gs[1:3,2])
-axhist.set_xlabel('KLD Histogram', fontsize=10.5, fontweight='bold')
-
-kldhist = []
-
-# Figures
-for task, data in struct.items():
-    kld = calculate_KLD(data['ctrls']['inflationTime(ms)'], data['free']['inflationTime(ms)'])
-    kldhist.append(kld)
-    totalpoints = data['free']['total reward'].iloc[-1]
+    # Figures
+    for task, data in struct.items():
+        kld = calculate_KLD(data['ctrls']['inflationTime(ms)'], data['free']['inflationTime(ms)'])
+        kldhist.append(kld)
+        totalpoints = data['free']['total reward'].iloc[-1]
 
 
-    # Using scipy's built in t-stat func
-    t_stat, p_value = stats.ttest_ind(data['free']['inflationTime(ms)'], data['ctrls']['inflationTime(ms)'])  # T-statistic for ITs?
+        # Using scipy's built in t-stat func
+        t_stat, p_value = stats.ttest_ind(data['free']['inflationTime(ms)'], data['ctrls']['inflationTime(ms)'])  # T-statistic for ITs?
 
-    ax11.scatter(kld, totalpoints, color='black')
-    ax12.scatter(kld, data['acc'], color='black')
-    ax13.scatter(kld, mean_RT(data['free']['reactionTime(ms)']), color='black')
-    
-    ax21.scatter(t_stat, totalpoints, color='black')
-    ax22.scatter(t_stat, data['acc'], color='black')
-    ax23.scatter(t_stat, mean_RT(data['free']['reactionTime(ms)']), color='black')
-
-    ax32.scatter(data['acc'], data['free']['total reward'].iloc[-1])
-
-axhist.hist(kldhist,bins=10,density=True)
-
-# Set axis limits
-def get_plot_limits(ax):
-    scatter_plots = [child for child in ax.get_children() if isinstance(child, PathCollection)]
-    x_values = []
-    
-    for scatter in scatter_plots:
-        points = scatter.get_offsets()
-        if len(points) > 0:
-            x_values.extend(points[:, 0])
-            
-    return min(x_values) if x_values else None, max(x_values) if x_values else None
-
-# Get min/max for KLD column (ax11, ax12, ax13)
-kld_mins, kld_maxs = [], []
-for ax in [ax11, ax12, ax13]:
-    min_val, max_val = get_plot_limits(ax)
-    if min_val is not None:
-        kld_mins.append(min_val)
-        kld_maxs.append(max_val)
-
-# Get min/max for t-stat column (ax21, ax22, ax23)
-tstat_mins, tstat_maxs = [], []
-for ax in [ax21, ax22, ax23]:
-    min_val, max_val = get_plot_limits(ax)
-    if min_val is not None:
-        tstat_mins.append(min_val)
-        tstat_maxs.append(max_val)
-
-# Set limits for KLD column
-if kld_mins and kld_maxs:
-    for ax in [ax11, ax12, ax13]:
-        ax.set_xlim(min(kld_mins), max(kld_maxs))
-
-# Set limits for t-stat column
-if tstat_mins and tstat_maxs:
-    for ax in [ax21, ax22, ax23]:
-        ax.set_xlim(min(tstat_mins), max(tstat_maxs))
-
+        ax11.scatter(kld, totalpoints, color='black')
+        ax12.scatter(kld, data['acc'], color='black')
+        ax13.scatter(kld, mean_RT(data['free']['reactionTime(ms)']), color='black')
         
+        ax21.scatter(t_stat, totalpoints, color='black')
+        ax22.scatter(t_stat, data['acc'], color='black')
+        ax23.scatter(t_stat, mean_RT(data['free']['reactionTime(ms)']), color='black')
 
-# RT Regression - for divergence and t stat
-modeld = RT_regression(ax13)
-modelt = RT_regression(ax23)
-#ax13.plot([], [])   
-#ax23.plot([], [])
+        ax32.scatter(data['acc'], data['free']['total reward'].iloc[-1])
 
-# TODO: Scatterplot + Histogram
+    axhist.hist(kldhist,bins=10,density=True)
+
+    # Set axis limits
+    def get_plot_limits(ax):
+        scatter_plots = [child for child in ax.get_children() if isinstance(child, PathCollection)]
+        x_values = []
+        
+        for scatter in scatter_plots:
+            points = scatter.get_offsets()
+            if len(points) > 0:
+                x_values.extend(points[:, 0])
+                
+        return min(x_values) if x_values else None, max(x_values) if x_values else None
+
+    # Get min/max for KLD column (ax11, ax12, ax13)
+    kld_mins, kld_maxs = [], []
+    for ax in [ax11, ax12, ax13]:
+        min_val, max_val = get_plot_limits(ax)
+        if min_val is not None:
+            kld_mins.append(min_val)
+            kld_maxs.append(max_val)
+
+    # Get min/max for t-stat column (ax21, ax22, ax23)
+    tstat_mins, tstat_maxs = [], []
+    for ax in [ax21, ax22, ax23]:
+        min_val, max_val = get_plot_limits(ax)
+        if min_val is not None:
+            tstat_mins.append(min_val)
+            tstat_maxs.append(max_val)
+
+    # Set limits for KLD column
+    if kld_mins and kld_maxs:
+        for ax in [ax11, ax12, ax13]:
+            ax.set_xlim(min(kld_mins), max(kld_maxs))
+
+    # Set limits for t-stat column
+    if tstat_mins and tstat_maxs:
+        for ax in [ax21, ax22, ax23]:
+            ax.set_xlim(min(tstat_mins), max(tstat_maxs))
+
+            
+
+    # RT Regression - for divergence and t stat
+    modeld = RT_regression(ax13)
+    modelt = RT_regression(ax23)
+    #ax13.plot([], [])   
+    #ax23.plot([], [])
 
 
-for ax in fig.get_axes():
-    ax.grid(True, linestyle='--', alpha=0.7, zorder=0)
+    for ax in fig.get_axes():
+        ax.grid(True, linestyle='--', alpha=0.7, zorder=0)
 
 
-plt.show()
+    #TODO: Change to save image
+    plt.show()
+
+
+if __name__=="__main__":
+    PATH='/home/ethant/Documents/Projects/bart/sessions/'
+    taskfiles = glob.glob(PATH + '**/task_data*.xlsx', recursive=True)
+
+    taskdf = {}
+
+    for file in taskfiles:
+        filename = os.path.splitext(os.path.basename(file))[0]
+
+        task = pd.read_excel(file)  # specify sheet name if needed: sheet_name='Sheet1'
+        taskdf[filename] = task
+
+    main(taskdf)

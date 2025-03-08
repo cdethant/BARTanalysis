@@ -35,162 +35,9 @@ def KLD(free, ctrl, bins=10, eps=1e-10):
     # scipy's entropy uses the same formula as KLD
     kld = entropy(histfree, histctrl)
     return kld
-### ---------------------------------------------------
 
-# Specify folder path
-PATH='/home/ethant/Documents/Projects/bart/'
-
-taskfile = filedialog.askopenfilename(initialdir=PATH, title="Select a file")
-sessionID = re.search(r'\d+_\d+_\d+_\d+_\d+_\d+', taskfile).group()
-
-taskdf = pd.read_excel(taskfile, header=0)
-taskdf.to_csv()
-
-# Control Trials
-ctrls = taskdf[taskdf['balloonType'].str.contains('special')]
-free = taskdf[~taskdf['balloonType'].str.contains('special') & ~taskdf['balloonType'].str.contains('gray')] 
-
-totalballoons = taskdf.shape[0]
-totalctrls = ctrls.shape[0]
-
-
-# Colors
-reds = taskdf[taskdf['balloonType'].str.contains('red')]
-oranges = taskdf[taskdf['balloonType'].str.contains('orange')]
-yellows = taskdf[taskdf['balloonType'].str.contains('yellow')]
-
-points = taskdf['total reward']
-all_rewards = reward(points)
-
-pointsRed = all_rewards[taskdf['balloonType'].str.contains('red')]
-pointsOrange = all_rewards[taskdf['balloonType'].str.contains('orange')]
-pointsYellow = all_rewards[taskdf['balloonType'].str.contains('yellow')]
-
-# Remove zeros
-pointsRed = pointsRed[pointsRed != 0]
-pointsOrange = pointsOrange[pointsOrange != 0]
-pointsYellow = pointsYellow[pointsYellow != 0]
-
-
-# Reaction Times - outliers removed
-ctrlRTs = outlier(ctrls['reactionTime(ms)'])
-freeRTs = outlier(free['reactionTime(ms)'])
-
-redRTS = outlier(reds['reactionTime(ms)'])
-orangeRTs = outlier(oranges['reactionTime(ms)'])
-yellowRTs = outlier(yellows['reactionTime(ms)'])
-
-# post pop RTs are the RTs that follow reward = 0
-postbankRTs = outlier(freeRTs[reward(points) != 0])
-postpopRTs = outlier(freeRTs[reward(points) == 0])
-
-# Inflation Times
-ITs = taskdf['inflationTime(ms)']
-ctrlITs = ctrls['inflationTime(ms)']
-freeITs = free['inflationTime(ms)']
-
-
-banked = taskdf.loc[taskdf['outcome'] == 'banked']
-popped = taskdf.loc[taskdf['outcome'] == 'popped']
-
-
-# Accuracies - Overall & Color
-accTotal = (banked.shape[0] / totalballoons) * 100
-accRed = (banked[banked['balloonType'].str.contains('red')].shape[0] / taskdf[taskdf['balloonType'].str.contains('red')].shape[0]) * 100
-accOrange = (banked[banked['balloonType'].str.contains('orange')].shape[0] / taskdf[taskdf['balloonType'].str.contains('orange')].shape[0]) * 100
-accYellow = (banked[banked['balloonType'].str.contains('yellow')].shape[0] / taskdf[taskdf['balloonType'].str.contains('yellow')].shape[0]) * 100
-
-avgReward = np.mean(reward(points))
-totalReward = np.sum(reward(points))
-
-#if p<0.01 ==> contingency table 
-# pandas crosstab function requires an aggfunc: count, mean, var etc.
-# which is matlabs default crosstab function?
-#crosstab = pd.crosstab(banked[banked['balloonType'].str.contains('red')],banked[banked['balloonType'].str.contains('orange')],banked[banked['balloonType'].str.contains('yellow')])
-#print(crosstab)
-
-# if p >, no significant difference.
-
-# distance of active trial distribution from passive trial distribution.
-# So lower divergence values means more similar distributions
-# => less impulsive choosers.
-
-
-# The number of Histogran bins.
-# N=10 for K-L Divergence Metric
-n_bins = 10
-
-
-KLDred = KLD(freeITs[free['balloonType'].str.contains('red')], ctrlITs[ctrls['balloonType'].str.contains('red')])
-
-#KLDred = KLDImpulse(freeITs[free['balloonType'].str.contains('red')],ctrlITs[ctrls['balloonType'].str.contains('red')])
-print(KLDred)
-
-
-# FIGURES ---------------------------------------------------
-
-# Create a figure and axes
-fig = plt.figure(layout='constrained')
-gs = fig.add_gridspec(2,6)
-
-
-ax1 = fig.add_subplot(gs[0,3:])
-ax2 = fig.add_subplot(gs[1,0:3])
-
-## FIGURE 1
-ax0 = fig.add_subplot(gs[0,0:3])
-ax0.hist(freeITs, bins=n_bins, alpha=0.5, edgecolor='black', color='blue')
-ax0.hist(ctrlITs, bins=n_bins, alpha=0.5, edgecolor='black', color='green')
-ax0.set_title('ITs - active vs passive')
-ax0.set_xlabel('time (s)')
-ax0.set_ylabel('IT count')
-
-## FIGURE 2 - ITs for each balloon color
-ax1.hist(ITs[taskdf['balloonType'].str.contains('red')], bins=n_bins, alpha=0.5, edgecolor='black', color='red')
-ax1.hist(ITs[taskdf['balloonType'].str.contains('orange')], bins=n_bins, alpha=0.5, edgecolor='black', color='orange')
-ax1.hist(ITs[taskdf['balloonType'].str.contains('yellow')], bins=n_bins, alpha=0.5, edgecolor='black', color='yellow')
-ax1.set_title('ITs - colors')
-ax1.set_xlabel('time (s)')
-ax1.set_ylabel('IT count')
-
-## FIGURE 3 - rewards from trials (including passive)
-ax2.hist(pointsRed, bins=n_bins, alpha=0.5, edgecolor='black', color='red')
-ax2.hist(pointsOrange, bins=n_bins, alpha=0.5, edgecolor='black', color='orange')
-ax2.hist(pointsYellow, bins=n_bins, alpha=0.5, edgecolor='black', color='yellow')
-ax2.set_title('Rewards across color')
-ax2.set_xlabel('reward (points)')
-ax2.set_ylabel('points bin count')
-
-print(pointsRed)
-print(pointsOrange)
-print(pointsYellow)
-
-## FIGURE 4 - Violin plots
-ax3 = fig.add_subplot(gs[1,3])
-ax4 = fig.add_subplot(gs[1,4])
-ax5 = fig.add_subplot(gs[1,5])
-
-ax3.violinplot([ctrlRTs, freeRTs], showmedians=True, positions=[1,2])
-ax3.set_xticks([1, 2])
-ax3.set_xticklabels(['Control', 'Free'], rotation=45)
-
-ax4.violinplot([redRTS, yellowRTs, orangeRTs], showmedians=True, positions=[1,2,3])
-ax4.set_xticks([1, 2, 3])
-ax4.set_xticklabels(['Red', 'Yellow', 'Orange'], rotation=45)
-
-ax5.violinplot([postbankRTs, postpopRTs], showmedians=True, positions=[1,2])
-ax5.set_xticks([1, 2])
-ax5.set_xticklabels(['Post Bank', 'Post Pop'], rotation=45)
-
-for ax in fig.get_axes():
-    ax.grid(True, linestyle='--', alpha=0.7, zorder=0)
-
-plt.show()
-
-# ----------------------------------------------------------
-
-def main():
-    # Save PDF
+def save_fig():
+    # Save as PDF
     fig.savefig('session_' + sessionID) # TODO: Replace with "{patient/sessionID}"
     c = canvas.Canvas('session_' + sessionID + '.pdf', pagesize=letter)
 
@@ -208,9 +55,154 @@ def main():
     c.drawString(60, 560, f"KLD-derived Impulsivity: {KLDred}")
 
     c.drawImage(f'session_{sessionID}.png', 50, 100, width=500, height=375)
-
     c.save()
+
+# ----------------------------------------------------------
+
+def main(trialdf):
+    # Control Trials
+    ctrls = trialdf[trialdf['balloonType'].str.contains('special')]
+    free = trialdf[~trialdf['balloonType'].str.contains('special') & ~trialdf['balloonType'].str.contains('gray')] 
+
+    totalballoons = trialdf.shape[0]
+    totalctrls = ctrls.shape[0]
+
+
+    # Colors
+    reds = trialdf[trialdf['balloonType'].str.contains('red')]
+    oranges = trialdf[trialdf['balloonType'].str.contains('orange')]
+    yellows = trialdf[trialdf['balloonType'].str.contains('yellow')]
+
+    points = trialdf['total reward']
+    all_rewards = reward(points)
+
+    pointsRed = all_rewards[trialdf['balloonType'].str.contains('red')]
+    pointsOrange = all_rewards[trialdf['balloonType'].str.contains('orange')]
+    pointsYellow = all_rewards[trialdf['balloonType'].str.contains('yellow')]
+
+    # Remove zeros
+    pointsRed = pointsRed[pointsRed != 0]
+    pointsOrange = pointsOrange[pointsOrange != 0]
+    pointsYellow = pointsYellow[pointsYellow != 0]
+
+
+    # Reaction Times - outliers removed
+    ctrlRTs = outlier(ctrls['reactionTime(ms)'])
+    freeRTs = outlier(free['reactionTime(ms)'])
+
+    redRTS = outlier(reds['reactionTime(ms)'])
+    orangeRTs = outlier(oranges['reactionTime(ms)'])
+    yellowRTs = outlier(yellows['reactionTime(ms)'])
+
+    # post pop RTs are the RTs that follow reward = 0
+    postbankRTs = outlier(freeRTs[reward(points) != 0])
+    postpopRTs = outlier(freeRTs[reward(points) == 0])
+
+    # Inflation Times
+    ITs = trialdf['inflationTime(ms)']
+    ctrlITs = ctrls['inflationTime(ms)']
+    freeITs = free['inflationTime(ms)']
+
+
+    banked = trialdf.loc[trialdf['outcome'] == 'banked']
+    popped = trialdf.loc[trialdf['outcome'] == 'popped']
+
+
+    # Accuracies - Overall & Color
+    accTotal = (banked.shape[0] / totalballoons) * 100
+    accRed = (banked[banked['balloonType'].str.contains('red')].shape[0] / trialdf[trialdf['balloonType'].str.contains('red')].shape[0]) * 100
+    accOrange = (banked[banked['balloonType'].str.contains('orange')].shape[0] / trialdf[trialdf['balloonType'].str.contains('orange')].shape[0]) * 100
+    accYellow = (banked[banked['balloonType'].str.contains('yellow')].shape[0] / trialdf[trialdf['balloonType'].str.contains('yellow')].shape[0]) * 100
+
+    avgReward = np.mean(reward(points))
+    totalReward = np.sum(reward(points))
+
+    #if p<0.01 ==> contingency table 
+    # pandas crosstab function requires an aggfunc: count, mean, var etc.
+    # which is matlabs default crosstab function?
+    #crosstab = pd.crosstab(banked[banked['balloonType'].str.contains('red')],banked[banked['balloonType'].str.contains('orange')],banked[banked['balloonType'].str.contains('yellow')])
+    #print(crosstab)
+
+    # if p >, no significant difference.
+
+    # distance of active trial distribution from passive trial distribution.
+    # So lower divergence values means more similar distributions
+    # => less impulsive choosers.
+
+
+    # The number of Histogran bins.
+    # N=10 for K-L Divergence Metric
+    n_bins = 10
+
+
+    KLDred = KLD(freeITs[free['balloonType'].str.contains('red')], ctrlITs[ctrls['balloonType'].str.contains('red')])
+
+    #KLDred = KLDImpulse(freeITs[free['balloonType'].str.contains('red')],ctrlITs[ctrls['balloonType'].str.contains('red')])
+
+
+    # Create a figure and axes
+    fig = plt.figure(layout='constrained')
+    gs = fig.add_gridspec(2,6)
+
+
+    ax1 = fig.add_subplot(gs[0,3:])
+    ax2 = fig.add_subplot(gs[1,0:3])
+
+    ## FIGURE 1
+    ax0 = fig.add_subplot(gs[0,0:3])
+    ax0.hist(freeITs, bins=n_bins, alpha=0.5, edgecolor='black', color='blue')
+    ax0.hist(ctrlITs, bins=n_bins, alpha=0.5, edgecolor='black', color='green')
+    ax0.set_title('ITs - active vs passive')
+    ax0.set_xlabel('time (s)')
+    ax0.set_ylabel('IT count')
+
+    ## FIGURE 2 - ITs for each balloon color
+    ax1.hist(ITs[trialdf['balloonType'].str.contains('red')], bins=n_bins, alpha=0.5, edgecolor='black', color='red')
+    ax1.hist(ITs[trialdf['balloonType'].str.contains('orange')], bins=n_bins, alpha=0.5, edgecolor='black', color='orange')
+    ax1.hist(ITs[trialdf['balloonType'].str.contains('yellow')], bins=n_bins, alpha=0.5, edgecolor='black', color='yellow')
+    ax1.set_title('ITs - colors')
+    ax1.set_xlabel('time (s)')
+    ax1.set_ylabel('IT count')
+
+    ## FIGURE 3 - rewards from trials (including passive)
+    ax2.hist(pointsRed, bins=n_bins, alpha=0.5, edgecolor='black', color='red')
+    ax2.hist(pointsOrange, bins=n_bins, alpha=0.5, edgecolor='black', color='orange')
+    ax2.hist(pointsYellow, bins=n_bins, alpha=0.5, edgecolor='black', color='yellow')
+    ax2.set_title('Rewards across color')
+    ax2.set_xlabel('reward (points)')
+    ax2.set_ylabel('points bin count')
+
+    ## FIGURE 4 - Violin plots
+    ax3 = fig.add_subplot(gs[1,3])
+    ax4 = fig.add_subplot(gs[1,4])
+    ax5 = fig.add_subplot(gs[1,5])
+
+    ax3.violinplot([ctrlRTs, freeRTs], showmedians=True, positions=[1,2])
+    ax3.set_xticks([1, 2])
+    ax3.set_xticklabels(['Control', 'Free'], rotation=45)
+
+    ax4.violinplot([redRTS, yellowRTs, orangeRTs], showmedians=True, positions=[1,2,3])
+    ax4.set_xticks([1, 2, 3])
+    ax4.set_xticklabels(['Red', 'Yellow', 'Orange'], rotation=45)
+
+    ax5.violinplot([postbankRTs, postpopRTs], showmedians=True, positions=[1,2])
+    ax5.set_xticks([1, 2])
+    ax5.set_xticklabels(['Post Bank', 'Post Pop'], rotation=45)
+
+    for ax in fig.get_axes():
+        ax.grid(True, linestyle='--', alpha=0.7, zorder=0)
+
+    plt.show()
 
 
 if __name__=="__main__":
-    main()
+    # Specify folder path
+    PATH='/home/ethant/Documents/Projects/bart/'
+
+    taskfile = filedialog.askopenfilename(initialdir=PATH, title="Select a file")
+    sessionID = re.search(r'\d+_\d+_\d+_\d+_\d+_\d+', taskfile).group()
+
+    trialdf = pd.read_excel(taskfile, header=0)
+    trialdf.to_csv()
+
+    main(trialdf)
